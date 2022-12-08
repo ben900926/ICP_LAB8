@@ -5,6 +5,7 @@
  */
 #include "include/lib.h"
 
+// current received file and seq
 static int file_no = 0, seq_no = 0;
 static int s = -1;
 static struct sockaddr_in sin;
@@ -13,6 +14,7 @@ static struct sockaddr_in csin;
 static socklen_t csinlen = sizeof(csin);
 
 void send_ack(int sig) {
+	//printf("SENDING ACK --> FILE: %d, SEQ: %d\n", file_no, seq_no);
 	ack_t ack = {.file_no = file_no, .seq_no = seq_no};
 	sendto(s, (void*) &ack, sizeof(ack), 0, (struct sockaddr*) &csin, sizeof(csin));
 	// printack(&ack);
@@ -47,7 +49,8 @@ int main(int argc, char *argv[]) {
 
 	signal(SIGALRM, send_ack);
 
-	ualarm( (useconds_t)( 256 ), (useconds_t) 256 );
+	// send 4 time to srv in 1024 usec
+	ualarm( (useconds_t)( CHECK_ACK_TIME ), (useconds_t) CHECK_ACK_TIME );
 	
 	/* handle receive file */
 	for (file_no = 0, seq_no = 0; file_no < nfiles; ) {
@@ -70,26 +73,34 @@ int main(int argc, char *argv[]) {
 				perror("recvfrom");
 				continue;
 			}
+			/* send ack right after server recv something
+			if(pkt.eof==0){
+				ack_t ack = {.file_no = file_no, .seq_no = seq_no};
+				sendto(s, (void*) &ack, sizeof(ack), 0, (struct sockaddr*) &csin, sizeof(csin));
+			}*/
 
 			/* Store */
+			// write to different file?
 			if (file_no == pkt.file_no && seq_no == pkt.seq_no)
 			{
 				printf("Receive packet name: %d\tseq: %d\teof: %d\n", pkt.file_no, pkt.seq_no, pkt.eof);
-
-				ack_t ack = {.file_no = file_no, .seq_no = seq_no};
-				sendto(s, (void*) &ack, sizeof(ack), 0, (struct sockaddr*) &csin, sizeof(csin));
-
-				if (write(fw, pkt.data, strlen(pkt.data)) < 0)
-					perror("write");
-				
-				seq_no++;
 
 				if (pkt.eof == 1) {
 					file_no++;
 					seq_no = 0;
 					break;	
 				}
+
+				if (write(fw, pkt.data, strlen(pkt.data)) < 0)
+					perror("write");
+				
+				seq_no++;
+
 			}
+			/* keep passing garbage
+			else{
+				printf("garbage: %d\tseq: %d\teof: %d\n", pkt.file_no, pkt.seq_no, pkt.eof);
+			}*/
 			
 			memset(&pkt, 0, sizeof(pkt));
 		}

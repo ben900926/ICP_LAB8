@@ -15,7 +15,10 @@
 
 #define err_quit(m) { perror(m); exit(-1); }
 
-#define MAXLINE 1024
+#define MAXLINE 512
+#define SEND_TIME 24
+#define CHECK_ACK_TIME 256
+#define MAX(a, b) (a>b?a:b)
 
 typedef struct {
     int     file_no;
@@ -29,5 +32,9 @@ typedef struct {
     int seq_no;
 } ack_t;
 
-void printpkt(pkt_t*);
-void printack(ack_t*);
+void printpkt(pkt_t* p){
+    printf("FILE: %d, SEQ: %d, EOF:%d\n", p->file_no, p->seq_no, p->eof);
+}
+void printack(ack_t* a){
+    printf("ACK ===== FILE: %d, SEQ: %d\n", a->file_no, a->seq_no);
+}

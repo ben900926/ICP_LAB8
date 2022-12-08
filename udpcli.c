@@ -11,24 +11,23 @@ static struct sockaddr_in sin;
 static int nfiles = INT_MAX;
 static ack_t ack;
 
+// every 256ms check for ack
+
 void recv_ack(int sig) {
 	struct sockaddr_in csin;
 	socklen_t csinlen = sizeof(csin);
 	int rlen;
-
-	usleep(256);
+	//printf("RECV ACK... sleep\n");
+	//usleep(256);
 
 	static int recordfn = 0, recordsn = 0;
 	while ((rlen = recvfrom(s, (void*) &ack, sizeof(ack), MSG_DONTWAIT, (struct sockaddr*) &csin, &csinlen)) > 0) {
-		if (recordfn != ack.file_no || recordsn != ack.seq_no) {
+		if (recordfn < ack.file_no || (recordfn == ack.file_no && recordsn < ack.seq_no)) {
 			recordfn = ack.file_no;
 			recordsn = ack.seq_no;
 			printf("Receive ACK ");
 			printack(&ack);
 		}
-
-		file_no = ack.file_no;
-		seq_no = 0;
 
 		if (file_no == nfiles) {
 			exit(0);
@@ -36,7 +35,11 @@ void recv_ack(int sig) {
 
 		memset(&ack, 0, sizeof(ack));
 	}
+	// update with largest ack received
+	file_no = recordfn;
+	seq_no = recordsn;
 }
+
 
 int main(int argc, char *argv[]) {
 	if(argc < 5) {
@@ -63,56 +66,63 @@ int main(int argc, char *argv[]) {
 	if((s = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) < 0)
 		err_quit("socket");
 
+	// check for ack every 1024 us
 	signal(SIGALRM, recv_ack);
-	ualarm( (useconds_t)( 1024 ), (useconds_t) 1024 );
+	ualarm( (useconds_t)( CHECK_ACK_TIME * 4 ), (useconds_t) CHECK_ACK_TIME * 4 );
 
 	for (file_no = 0, seq_no = 0; file_no <= nfiles; ) {
 		if (file_no == nfiles) continue;
 		
+		// open data
 		sprintf(filepath, "%s/%06d", path, file_no);
-		
 		fr = open(filepath, O_RDONLY);
-		pkt_t pkt = {.file_no = file_no, .seq_no = seq_no, .eof = 0};
-		
 		if (fr == -1)
 		{	
 			err_quit("No such file");
 		}
-		else
-		{
-			seq_no = 0;
-			while (read(fr, pkt.data, sizeof(pkt.data)) > 0) {
-				if (file_no == ack.file_no && seq_no < ack.seq_no) continue;
-				// if (strlen(pkt.data) < MAXLINE-1) pkt.eof = 1;
+		// define pkt
+		pkt_t pkt = {.file_no = file_no, .seq_no = seq_no, .eof = 0};
+		// have sent to server
+		int skip_seq = seq_no;
+		//seq_no = 0;
+		// each seq send for 32 times
+		//printf("SEND FILE...");
+		while (read(fr, pkt.data, sizeof(pkt.data)) > 0) {
 
-				// printpkt(&pkt);
-
-				for (int i = 0; i < 32; i++) {
-					if(sendto(s, (void*) &pkt, sizeof(pkt), 0, (struct sockaddr*) &sin, sizeof(sin)) < 0)
-						perror("sendto");
-					usleep(1);
-				}
-				
-				pkt.seq_no++;
-				seq_no++;
-
-				memset(&pkt.data, 0, sizeof(pkt.data));
+			//if (file_no == ack.file_no && seq_no < ack.seq_no) continue;
+			if(skip_seq>0){
+				skip_seq--;
+				continue;
 			}
 
-			if (pkt.eof == 0) {
-				pkt.eof = 1;
-				for (int i = 0; i < 32; i++) {
-					if(sendto(s, (void*) &pkt, sizeof(pkt), 0, (struct sockaddr*) &sin, sizeof(sin)) < 0)
-						perror("sendto");
-					usleep(1);
-				}
+			for (int i = 0; i < SEND_TIME; i++) {
+				if(sendto(s, (void*) &pkt, sizeof(pkt), 0, (struct sockaddr*) &sin, sizeof(sin)) < 0)
+					perror("sendto");
+				usleep(1);
 			}
+			
+			pkt.seq_no++;
+			seq_no++;
 
-			close(fr);
-
-			file_no++;
+			memset(&pkt.data, 0, sizeof(pkt.data));
 		}
 
+		// reach the end of file
+		if (pkt.eof == 0) {
+			pkt.eof = 1;
+			memset(&pkt.data, 0, sizeof(pkt.data));
+			for (int i = 0; i < SEND_TIME; i++) {
+				if(sendto(s, (void*) &pkt, sizeof(pkt), 0, (struct sockaddr*) &sin, sizeof(sin)) < 0)
+					perror("sendto");
+				usleep(1);
+			}
+		}
+
+		close(fr);
+
+		file_no++;
+		seq_no = 0;
+		
 		memset(filepath, 0, sizeof(filepath));
 	}
 
