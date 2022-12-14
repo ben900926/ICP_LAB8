@@ -11,37 +11,6 @@ static struct sockaddr_in sin;
 static int nfiles = INT_MAX;
 static ack_t ack;
 
-// every 256ms check for ack
-
-/*
-void recv_ack(int sig) {
-	struct sockaddr_in csin;
-	socklen_t csinlen = sizeof(csin);
-	int rlen;
-	//printf("RECV ACK... sleep\n");
-	//usleep(256);
-
-	static int recordfn = 0, recordsn = 0;
-	while ((rlen = recvfrom(s, (void*) &ack, sizeof(ack), MSG_DONTWAIT, (struct sockaddr*) &csin, &csinlen)) > 0) {
-		if (recordfn < ack.file_no || (recordfn == ack.file_no && recordsn < ack.seq_no)) {
-			recordfn = ack.file_no;
-			recordsn = ack.seq_no;
-			printf("Receive ACK ");
-			printack(&ack);
-		}
-
-		if (file_no == nfiles) {
-			exit(0);
-		}
-
-		memset(&ack, 0, sizeof(ack));
-	}
-	// update with largest ack received
-	file_no = recordfn;
-	seq_no = recordsn;
-}
-*/
-
 int main(int argc, char *argv[]) {
 	if(argc < 5) {
 		return -fprintf(stderr, "usage: %s <path-to-read-files> <total-number-of-files> <port> <server-ip-address>\n", argv[0]);
@@ -96,7 +65,7 @@ int main(int argc, char *argv[]) {
 				if(sendto(s, (void*) &pkt, sizeof(pkt), 0, (struct sockaddr*) &sin, sizeof(sin)) < 0)
 					perror("sendto");
                 // recv ack
-                usleep(250);
+                usleep(50);
 				int rlen;
                 if((rlen = recvfrom(s, (void*) &ack, sizeof(ack), MSG_DONTWAIT, NULL, NULL)) > 0){
 					//printf("RECV: ");
@@ -105,6 +74,7 @@ int main(int argc, char *argv[]) {
                         break;
                     }
                 }
+				usleep(80);
 			}
 			
 			pkt.seq_no++;
@@ -120,7 +90,7 @@ int main(int argc, char *argv[]) {
 			for (int i = 0; i < SEND_TIME; i++) {
 				if(sendto(s, (void*) &pkt, sizeof(pkt), 0, (struct sockaddr*) &sin, sizeof(sin)) < 0)
 					perror("sendto");
-				usleep(250);
+				usleep(50);
                 int rlen;
                 if((rlen = recvfrom(s, (void*) &ack, sizeof(ack), MSG_DONTWAIT, NULL, NULL)) > 0){
 					//printf("RECV: ");
@@ -129,6 +99,7 @@ int main(int argc, char *argv[]) {
                         break;
                     }
                 }
+				usleep(80);
 			}
 		}
 
@@ -140,7 +111,7 @@ int main(int argc, char *argv[]) {
 		memset(filepath, 0, sizeof(filepath));
 	}
 
-	sleep(10);
+	sleep(8);
 	close(s);
 	exit(0);
 }
