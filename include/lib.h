@@ -15,8 +15,8 @@
 
 #define err_quit(m) { perror(m); exit(-1); }
 
-#define MAXLINE 512
-#define SEND_TIME 24
+#define MAXLINE 1024
+#define SEND_TIME 32
 #define CHECK_ACK_TIME 256
 #define MAX(a, b) (a>b?a:b)
 

@@ -74,9 +74,9 @@ int main(int argc, char *argv[]) {
 	//signal(SIGALRM, recv_ack);
 	//ualarm( (useconds_t)( CHECK_ACK_TIME * 4 ), (useconds_t) CHECK_ACK_TIME * 4 );
 
-	for (file_no = 0, seq_no = 0; file_no <= nfiles; ) {
-		if (file_no == nfiles) continue;
-		if(file_no>5) break;
+	for (file_no = 0, seq_no = 0; file_no < nfiles; ) {
+		
+		//if(file_no>10) break;
 		// open data
 		sprintf(filepath, "%s/%06d", path, file_no);
 		fr = open(filepath, O_RDONLY);
@@ -91,40 +91,27 @@ int main(int argc, char *argv[]) {
 		//seq_no = 0;
 		// each seq send for 32 times
 		//printf("SEND FILE...");
-		int pkt_num = 0;
-		pkt_t pkts[80];
-		memset(pkts, 0, sizeof(pkts));
-		int sent_pkt[80];
-		memset(sent_pkt, 0, sizeof(sent_pkt));
-
 		while (read(fr, pkt.data, sizeof(pkt.data)) > 0) {
-			pkts[ pkt_num ] = pkt;
-			pkt.seq_no++;
-			pkt_num++;
-		}
-
-		for (int i = 0; i < pkt_num; i++) {
-			if(sent_pkt[i]>0)
-				continue;
-			
-			if(sendto(s, (void*) &pkts[i], sizeof(pkts[i]), 0, (struct sockaddr*) &sin, sizeof(sin)) < 0)
-				perror("sendto");
-			// recv ack
-			int rlen;
-			if((rlen = recvfrom(s, (void*) &ack, sizeof(ack), 0, NULL, NULL)) > 0){
-				//printf("RECV: ");
-				//printack(&ack);
-				if(ack.file_no == pkts[i].file_no && ack.seq_no == pkts[i].seq_no+1){
-					sent_pkt[i] = 1;
-				}
+			for (int i = 0; i < SEND_TIME; i++) {
+				if(sendto(s, (void*) &pkt, sizeof(pkt), 0, (struct sockaddr*) &sin, sizeof(sin)) < 0)
+					perror("sendto");
+                // recv ack
+                usleep(250);
+				int rlen;
+                if((rlen = recvfrom(s, (void*) &ack, sizeof(ack), MSG_DONTWAIT, NULL, NULL)) > 0){
+					//printf("RECV: ");
+					//printack(&ack);
+					if(ack.file_no == pkt.file_no && ack.seq_no == pkt.seq_no+1){
+                        break;
+                    }
+                }
 			}
-		}
-		
-		pkt.seq_no++;
-		seq_no++;
+			
+			pkt.seq_no++;
+			seq_no++;
 
-		memset(&pkt.data, 0, sizeof(pkt.data));
-		
+			memset(&pkt.data, 0, sizeof(pkt.data));
+		}
 
 		// reach the end of file
 		if (pkt.eof == 0) {
@@ -133,11 +120,9 @@ int main(int argc, char *argv[]) {
 			for (int i = 0; i < SEND_TIME; i++) {
 				if(sendto(s, (void*) &pkt, sizeof(pkt), 0, (struct sockaddr*) &sin, sizeof(sin)) < 0)
 					perror("sendto");
-				//usleep(0.01);
-				//printf("SEND: ");
-				//printpkt(&pkt);
+				usleep(250);
                 int rlen;
-                if((rlen = recvfrom(s, (void*) &ack, sizeof(ack), 0, NULL, NULL)) > 0){
+                if((rlen = recvfrom(s, (void*) &ack, sizeof(ack), MSG_DONTWAIT, NULL, NULL)) > 0){
 					//printf("RECV: ");
 					//printack(&ack);
 					if(ack.file_no == pkt.file_no+1){
@@ -155,5 +140,7 @@ int main(int argc, char *argv[]) {
 		memset(filepath, 0, sizeof(filepath));
 	}
 
+	sleep(10);
 	close(s);
+	exit(0);
 }
